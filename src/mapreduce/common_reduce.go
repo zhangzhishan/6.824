@@ -1,21 +1,29 @@
 package mapreduce
 
-// doReduce manages one reduce task: it reads the intermediate
-// key/value pairs (produced by the map phase) for this task, sorts the
-// intermediate key/value pairs by key, calls the user-defined reduce function
-// (reduceF) for each key, and writes the output to disk.
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"sort"
+)
+
 func doReduce(
 	jobName string, // the name of the whole MapReduce job
-	reduceTaskNumber int, // which reduce task this is
+	reduceTask int, // which reduce task this is
 	outFile string, // write the output here
 	nMap int, // the number of map tasks that were run ("M" in the paper)
 	reduceF func(key string, values []string) string,
 ) {
 	//
-	// You will need to write this function.
+	// doReduce manages one reduce task: it should read the intermediate
+	// files for the task, sort the intermediate key/value pairs by key,
+	// call the user-defined reduce function (reduceF) for each key, and
+	// write reduceF's output to disk.
 	//
 	// You'll need to read one intermediate file from each map task;
-	// reduceName(jobName, m, reduceTaskNumber) yields the file
+	// reduceName(jobName, m, reduceTask) yields the file
 	// name from map task m.
 	//
 	// Your doMap() encoded the key/value pairs in the intermediate
@@ -43,4 +51,53 @@ func doReduce(
 	// }
 	// file.Close()
 	//
+	// Your code here (Part I).
+	//
+	// fmt.Println("do reducing")
+	var beforReduce []KeyValue
+	kvmaps := make(map[string][]string)
+	// var keys []string
+	// var values []string
+	for m := 0; m < nMap; m++ {
+		filename := reduceName(jobName, m, reduceTask)
+		fmt.Println(filename)
+		file, _ := os.Open(filename)
+
+		dec := json.NewDecoder(file)
+
+		for {
+			var temp KeyValue
+			if err := dec.Decode(&temp); err == io.EOF {
+				break
+			} else if err != nil {
+				log.Fatal(err)
+			}
+			// fmt.Printf("%s: %s\n", m.Key, m.Value)
+			// keys = append(keys, temp.Key)
+			// values = append(values, temp.Value)
+			beforReduce = append(beforReduce, temp)
+		}
+
+	}
+	// fmt.Println("1 reducing")
+
+	sort.Slice(beforReduce, func(i, j int) bool {
+		return beforReduce[i].Key < beforReduce[j].Key
+	})
+	// sort.Strings(keys)
+	// fmt.Println("2 reducing")
+	for _, kv := range beforReduce {
+		kvmaps[kv.Key] = append(kvmaps[kv.Key], kv.Value)
+	}
+
+	outfile, _ := os.OpenFile(outFile, os.O_RDWR|os.O_CREATE, 0755)
+	fmt.Println(outFile)
+	enc := json.NewEncoder(outfile)
+	// fmt.Println("3 reducing")
+
+	for key := range kvmaps {
+		enc.Encode(KeyValue{key, reduceF(key, kvmaps[key])})
+	}
+	// fmt.Println("finish reducing")
+
 }

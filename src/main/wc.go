@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"mapreduce"
 	"os"
+	"strconv"
+	"strings"
+	"unicode"
 )
 
 //
@@ -14,7 +17,22 @@ import (
 // of key/value pairs.
 //
 func mapF(filename string, contents string) []mapreduce.KeyValue {
-	// TODO: you have to write this function
+	// Your code here (Part II).
+	f := func(c rune) bool {
+		return !unicode.IsLetter(c) && !unicode.IsNumber(c)
+	}
+	fields := strings.FieldsFunc(contents, f)
+	kvs := make([]mapreduce.KeyValue, 0)
+	for _, key := range fields {
+		var temp mapreduce.KeyValue
+		temp.Key = key
+		temp.Value = "1"
+		kvs = append(kvs, temp)
+	}
+	// var ret []mapreduce.KeyValue
+
+	// fmt.Println("ret")
+	return kvs
 }
 
 //
@@ -23,7 +41,20 @@ func mapF(filename string, contents string) []mapreduce.KeyValue {
 // any map task.
 //
 func reduceF(key string, values []string) string {
-	// TODO: you also have to write this function
+	// Your code here (Part II).
+	// fmt.Println(key)
+	var value int
+	for _, key := range values {
+		// fmt.Println(key)
+		i, err := strconv.Atoi(key)
+
+		if err != nil {
+			fmt.Println(err)
+			break
+		}
+		value += i
+	}
+	return strconv.Itoa(value)
 }
 
 // Can be run in 3 ways:
@@ -42,6 +73,6 @@ func main() {
 		}
 		mr.Wait()
 	} else {
-		mapreduce.RunWorker(os.Args[2], os.Args[3], mapF, reduceF, 100)
+		mapreduce.RunWorker(os.Args[2], os.Args[3], mapF, reduceF, 100, nil)
 	}
 }
