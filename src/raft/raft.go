@@ -17,8 +17,11 @@ package raft
 //   in the same server.
 //
 
-import "sync"
-import "labrpc"
+import (
+	"labrpc"
+	"math/rand"
+	"sync"
+)
 
 // import "bytes"
 // import "encoding/gob"
@@ -44,7 +47,7 @@ type Raft struct {
 	persister *Persister          // Object to hold this peer's persisted state
 	me        int                 // this peer's index into peers[]
 
-	state           int
+	state           int // 0 follower 1 candidate 2 leader
 	electionTimeout int
 
 	currentTerm int
@@ -78,10 +81,18 @@ func (rf *Raft) GetState() (int, bool) {
 	// Your code here (2A).
 	rf.mu.Lock()
 	term = rf.currentTerm
-	isleader = rf.persister.raftstate
+	isleader = rf.state == 2
 	rf.mu.Unlock()
 
 	return term, isleader
+}
+
+func (rf *Raft) GetLastIndex() int {
+	return rf.log[rf.lastApplied].LogIndex
+}
+
+func (rf *Raft) GetLastTerm() int {
+	return rf.log[rf.lastApplied].LogTerm
 }
 
 //
@@ -142,9 +153,14 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
-	a := rand
-	if args.CandidateTerm < reply.CurrentTerm {
+	if args.CandidateTerm < rf.currentTerm {
 		reply.VoteGranted = false
+		return
+	}
+	if (rf.votedFor == -1 || rf.votedFor == args.CandidateID) && args.LastLogTerm >= rf.GetLastTerm() {
+		reply.VoteGranted = true
+		reply.CurrentTerm = args.CandidateTerm
+		return
 	}
 
 }
@@ -254,19 +270,23 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 
 	// Your initialization code here (2A, 2B, 2C).
+
 	rf.currentTerm++
 	rf.votedFor = rf.me
-	rf.electionTimeout = randInt(400, 490)
+	rf.electionTimeout = rand.Intn(100) + 400
 
 	requestVoteArgs := &RequestVoteArgs{}
+
 	requestVoteArgs.CandidateID = rf.me
 	requestVoteArgs.CandidateTerm = rf.currentTerm
-	requestVoteArgs.LastLogIndex = rf.log[rf.lastApplied].LogIndex
-	requestVoteArgs.LastLogTerm = rf.log[rf.lastApplied].LogTerm
+	requestVoteArgs.LastLogIndex = rf.GetLastIndex()
+	requestVoteArgs.LastLogTerm = rf.GetLastTerm()
 
-	requestVoteReply := &RequestVoteReply{}
 	for peer := range rf.peers {
-		ok := rf.sendRequestVote(peer, requestVoteArgs, requestVoteReply)
+		go func(peer int) {
+			requestVoteReply := &RequestVoteReply{}
+			rf.sendRequestVote(peer, requestVoteArgs, requestVoteReply)
+		}(peer)
 	}
 
 	// initialize from state persisted before a crash
